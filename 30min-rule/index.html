@@ -281,8 +281,7 @@ pre { white-space: pre-wrap; word-break: break-word; font: inherit; background: 
     location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(name) + '&input=text&text=' + encodeURIComponent(String(minutes));
   }
   $('startBtn').addEventListener('click', function () {
-    var t = $('newTitle').value.trim();
-    if (!t) { $('newTitle').focus(); return; }
+    var t = $('newTitle').value.trim() || '無題の調査';
     $('newTitle').value = '';
     startSession(t);
   });
@@ -433,12 +432,12 @@ pre { white-space: pre-wrap; word-break: break-word; font: inherit; background: 
 
   /* ---------- 起動 ---------- */
   startTicking();
-  // ?start=タイトル(&min=分) で開かれたら、そのまま調査を開始する。調査中なら無視。再読込で二重開始しないようURLを掃除する。
+  // ?start=タイトル(&min=分) で開かれたら、そのまま調査を開始する(調査中なら新しい調査に置き換える)。再読込で二重開始しないようURLを掃除する。
   var qs = new URLSearchParams(location.search);
   var qTitle = (qs.get('start') || '').trim().slice(0, 80);
   var qMin = parseInt(qs.get('min'), 10);
   if (qs.has('start') || qs.has('min')) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
-  if (qTitle && !state.current) startSession(qTitle, true, qMin >= 1 && qMin <= 180 ? qMin : 0);
+  if (qTitle) startSession(qTitle, true, qMin >= 1 && qMin <= 180 ? qMin : 0);
   else show(state.current ? 'working' : 'home');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(function () {});
