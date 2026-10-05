@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6fed">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="30分ルール">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>30分ルール</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1f2430; --sub: #667085; --line: #e3e6ec;
+  --accent: #2f6fed; --accent-text: #ffffff; --ok: #1a8f5a; --warn: #c77700; --danger: #d92d20;
+  --danger-bg: #fdecea;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --card: #1c2029; --text: #e8ebf2; --sub: #9aa3b5; --line: #2c3240;
+    --accent: #5b8cff; --accent-text: #0b1020; --ok: #43c68a; --warn: #f0a93b; --danger: #ff6b5e;
+    --danger-bg: #3a1c1a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; line-height: 1.6; }
+main { max-width: 560px; margin: 0 auto; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+h1 { font-size: 18px; margin: 4px 0 12px; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+label { display: block; font-size: 13px; color: var(--sub); margin: 10px 0 4px; }
+input[type=text], input[type=number], textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+textarea { min-height: 84px; resize: vertical; }
+button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 10px; padding: 12px 14px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.ok { background: var(--ok); color: #fff; border-color: var(--ok); font-weight: 600; }
+button.block { width: 100%; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+.nav { display: flex; gap: 6px; margin-bottom: 12px; }
+.nav button { flex: 1; padding: 8px 4px; font-size: 13px; }
+.nav button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.timer { font-size: 64px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.timer.over { color: var(--danger); }
+.banner { background: var(--danger-bg); color: var(--danger); border-radius: 10px; padding: 12px; font-weight: 600; text-align: center; margin-bottom: 12px; }
+.banner.soft { background: var(--card); color: var(--warn); border: 1px solid var(--line); }
+.sub { color: var(--sub); font-size: 13px; }
+.stat { display: flex; justify-content: space-between; font-size: 14px; padding: 4px 0; }
+.hist { border-top: 1px solid var(--line); padding: 8px 0; font-size: 14px; }
+.hist:first-child { border-top: 0; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); margin-left: 6px; }
+.tag.solved { color: var(--ok); } .tag.asked { color: var(--accent); }
+pre { white-space: pre-wrap; word-break: break-word; font: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 6px 0; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>30分ルール <span class="sub">調べて分からなければ人に聞く</span></h1>
+  <div class="nav">
+    <button data-nav="home">ホーム</button>
+    <button data-nav="working">調査中</button>
+    <button data-nav="ask">質問作成</button>
+    <button data-nav="history">履歴・設定</button>
+  </div>
+
+  <!-- ホーム -->
+  <section id="home">
+    <div class="card">
+      <h2>何を調べますか？</h2>
+      <input type="text" id="newTitle" placeholder="例: ビルドエラーの原因" maxlength="80">
+      <p class="sub" id="homeLimit"></p>
+      <button class="primary block" id="startBtn">調べ始める</button>
+    </div>
+    <div class="card">
+      <h2>今週の集計(直近7日)</h2>
+      <div id="weekStats"></div>
+    </div>
+    <div class="card">
+      <h2>直近の履歴</h2>
+      <div id="recentHist"></div>
+    </div>
+    <button class="block" id="provOnlyBtn">質問文だけ先に作る(暫定連絡)</button>
+  </section>
+
+  <!-- 調査中 -->
+  <section id="working" class="hidden">
+    <div id="noSession" class="card hidden"><p>調査中のものはありません。ホームから「調べ始める」を押してください。</p></div>
+    <div id="sessionBox" class="hidden">
+      <div id="overBanner" class="banner hidden">時間です。ここで質問しましょう。</div>
+      <div id="warnBanner" class="banner soft hidden">残り10分です。分からなければ質問の準備を。</div>
+      <div class="card">
+        <div class="sub" id="sessTitle"></div>
+        <div class="timer" id="timer">30:00</div>
+        <div class="sub" style="text-align:center" id="sessSub"></div>
+      </div>
+      <div class="card">
+        <h2>調べたこと(1行1項目)</h2>
+        <textarea id="notes" placeholder="試したこと・見たページ・結果を1行ずつ"></textarea>
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <button class="ok" id="solvedBtn">解決した</button>
+        <button class="primary" id="askBtn">質問する</button>
+      </div>
+      <div class="row">
+        <button id="extendBtn">あと5分だけ(1回)</button>
+        <button id="cancelBtn">中止(記録しない)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 質問作成 -->
+  <section id="ask" class="hidden">
+    <div class="card">
+      <h2>質問文の下書き</h2>
+      <label>相手の名前(任意)</label>
+      <input type="text" id="fTo" placeholder="例: 山田さん">
+      <label>テーマ</label>
+      <input type="text" id="fTitle">
+      <label>やりたいこと</label>
+      <textarea id="fGoal"></textarea>
+      <label>試したこと(調査メモから自動転記)</label>
+      <textarea id="fTried"></textarea>
+      <label>分からない点</label>
+      <textarea id="fStuck"></textarea>
+      <label>教えてほしいこと</label>
+      <textarea id="fWant"></textarea>
+    </div>
+    <div class="card">
+      <h2>暫定連絡(一行・先に送る)</h2>
+      <pre id="outProv"></pre><button class="block" data-copy="outProv">コピー</button>
+    </div>
+    <div class="card">
+      <h2>Slack向け</h2>
+      <pre id="outSlack"></pre><button class="block" data-copy="outSlack">コピー</button>
+    </div>
+    <div class="card">
+      <h2>メール向け</h2>
+      <pre id="outMail"></pre><button class="block" data-copy="outMail">コピー</button>
+    </div>
+    <p class="sub">送信はこのアプリでは行いません。コピーして自分で送ってください。</p>
+  </section>
+
+  <!-- 履歴・設定 -->
+  <section id="history" class="hidden">
+    <div class="card">
+      <h2>設定</h2>
+      <label>制限時間(分)</label>
+      <input type="number" id="sLimit" min="1" max="180">
+      <label><input type="checkbox" id="sWarn"> 残り10分の予告通知</label>
+      <label><input type="checkbox" id="sExtend"> 「あと5分だけ」を許可(1回まで)</label>
+      <button class="block" id="notifBtn" style="margin-top:10px">通知を許可する</button>
+      <p class="sub" id="notifState"></p>
+      <label>iPhone「ショートカット」連携(任意)</label>
+      <input type="text" id="sShortcut" placeholder="作成したショートカットの名前(空欄で無効)">
+      <p class="sub">入力すると、調べ始めた時にそのショートカットを呼び出し、制限時間(分)を渡します。時計アプリのタイマー用です。</p>
+    </div>
+    <div class="card">
+      <h2>履歴</h2>
+      <div id="allHist"></div>
+    </div>
+    <button class="block" id="clearHist">履歴をすべて消す</button>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'rule30.v1';
+  var DEFAULT = { current: null, draft: null, history: [], settings: { limit: 30, warn: true, extend: true, shortcut: '' } };
+  var state = load();
+  var audioCtx = null;
+  var tickId = null;
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        s.settings = Object.assign({}, DEFAULT.settings, s.settings || {});
+        s.history = s.history || [];
+        return Object.assign({ current: null, draft: null }, s);
+      }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULT));
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function fmtDate(t) { var d = new Date(t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
+  /* ---------- 画面切替 ---------- */
+  var current = 'home';
+  function show(name) {
+    current = name;
+    ['home', 'working', 'ask', 'history'].forEach(function (n) { $(n).classList.toggle('hidden', n !== name); });
+    document.querySelectorAll('[data-nav]').forEach(function (b) { b.classList.toggle('active', b.dataset.nav === name); });
+    if (name === 'home') renderHome();
+    if (name === 'working') renderWorking();
+    if (name === 'ask') renderAsk();
+    if (name === 'history') renderHistory();
+  }
+  document.querySelectorAll('[data-nav]').forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.nav); }); });
+
+  /* ---------- ホーム ---------- */
+  function histRow(h) {
+    var label = h.result === 'solved' ? '解決' : '質問';
+    return '<div class="hist"><b>' + esc(h.title) + '</b><span class="tag ' + h.result + '">' + label + '</span><br>' +
+      '<span class="sub">' + fmtDate(h.startedAt) + ' ・ ' + h.minutes + '分</span></div>';
+  }
+  function renderHome() {
+    $('homeLimit').textContent = '制限時間: ' + state.settings.limit + '分(設定で変更できます)';
+    var week = state.history.filter(function (h) { return h.startedAt > Date.now() - 7 * 86400000; });
+    var solved = week.filter(function (h) { return h.result === 'solved'; }).length;
+    var avg = week.length ? Math.round(week.reduce(function (a, h) { return a + h.minutes; }, 0) / week.length) : 0;
+    $('weekStats').innerHTML =
+      '<div class="stat"><span>調査した件数</span><b>' + week.length + '件</b></div>' +
+      '<div class="stat"><span>自力で解決</span><b>' + solved + '件</b></div>' +
+      '<div class="stat"><span>質問した</span><b>' + (week.length - solved) + '件</b></div>' +
+      '<div class="stat"><span>平均調査時間</span><b>' + avg + '分</b></div>';
+    var recent = state.history.slice(0, 3);
+    $('recentHist').innerHTML = recent.length ? recent.map(histRow).join('') : '<p class="sub">まだ記録はありません。</p>';
+  }
+
+  /* ---------- 通知・音 ---------- */
+  function unlockAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  }
+  function beep(times) {
+    try {
+      if (!audioCtx) return;
+      for (var i = 0; i < times; i++) {
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
+        var t = audioCtx.currentTime + i * 0.35;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+        o.start(t); o.stop(t + 0.28);
+      }
+    } catch (e) {}
+  }
+  function notify(title, body, beeps) {
+    try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body: body }); } catch (e) {}
+    try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+    beep(beeps);
+  }
+  function updateNotifState() {
+    var el = $('notifState'), btn = $('notifBtn');
+    if (!('Notification' in window)) { el.textContent = 'このブラウザは通知に対応していません(音と画面表示のみ)。'; btn.classList.add('hidden'); return; }
+    var p = Notification.permission;
+    el.textContent = p === 'granted' ? '通知: 許可済み' : p === 'denied' ? '通知: ブロック中(ブラウザの設定で許可してください)' : '通知: 未許可';
+    btn.classList.toggle('hidden', p !== 'default');
+  }
+  $('notifBtn').addEventListener('click', function () {
+    try { Notification.requestPermission().then(updateNotifState); } catch (e) {}
+  });
+
+  /* ---------- 調査開始・タイマー ---------- */
+  function endAt(c) { return c.startedAt + (c.limitMin + c.extraMin) * 60000; }
+  function startSession(title) {
+    unlockAudio();
+    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(updateNotifState); } catch (e) {}
+    state.current = { title: title, startedAt: Date.now(), limitMin: state.settings.limit, extraMin: 0, extended: false, warned: false, alerted: false, notes: '' };
+    state.draft = null;
+    save();
+    show('working');
+    runShortcut(state.current.limitMin);
+  }
+  // iPhoneの「ショートカット」を呼び出す(時計アプリのタイマー用)。呼び出し後にアプリへ戻っても状態は保存済み。
+  function runShortcut(minutes) {
+    var name = (state.settings.shortcut || '').trim();
+    if (!name) return;
+    location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(name) + '&input=text&text=' + encodeURIComponent(String(minutes));
+  }
+  $('startBtn').addEventListener('click', function () {
+    var t = $('newTitle').value.trim();
+    if (!t) { $('newTitle').focus(); return; }
+    $('newTitle').value = '';
+    startSession(t);
+  });
+  $('newTitle').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('startBtn').click(); });
+
+  function renderWorking() {
+    var c = state.current;
+    $('noSession').classList.toggle('hidden', !!c);
+    $('sessionBox').classList.toggle('hidden', !c);
+    if (!c) return;
+    $('sessTitle').textContent = c.title;
+    if (document.activeElement !== $('notes')) $('notes').value = c.notes;
+    $('extendBtn').classList.toggle('hidden', !state.settings.extend || c.extended);
+    tick();
+  }
+  function tick() {
+    var c = state.current;
+    if (!c) return;
+    var remain = endAt(c) - Date.now();
+    var over = remain <= 0;
+    var abs = Math.abs(remain);
+    var m = Math.floor(abs / 60000), s = Math.floor((abs % 60000) / 1000);
+    if (current === 'working') {
+      $('timer').textContent = (over ? '+' : '') + pad(m) + ':' + pad(s);
+      $('timer').classList.toggle('over', over);
+      $('overBanner').classList.toggle('hidden', !over);
+      $('warnBanner').classList.toggle('hidden', over || !c.warned);
+      $('sessSub').textContent = over ? '超過中 — 質問しましょう' : '開始 ' + fmtDate(c.startedAt);
+    }
+    document.title = (over ? '⏰ 時間です' : pad(m) + ':' + pad(s)) + ' - 30分ルール';
+    var changed = false;
+    if (!over && !c.warned && state.settings.warn && c.limitMin + c.extraMin > 10 && remain <= 10 * 60000) {
+      c.warned = true; changed = true;
+      notify('残り10分', '「' + c.title + '」— 分からなければ質問の準備を', 1);
+    }
+    if (over && !c.alerted) {
+      c.alerted = true; changed = true;
+      notify('時間です', '「' + c.title + '」— ここで質問しましょう', 3);
+    }
+    if (changed) save();
+  }
+  function startTicking() { if (!tickId) tickId = setInterval(tick, 500); }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
+
+  $('notes').addEventListener('input', function () { if (state.current) { state.current.notes = $('notes').value; save(); } });
+
+  $('extendBtn').addEventListener('click', function () {
+    var c = state.current; if (!c || c.extended) return;
+    var remain = endAt(c) - Date.now();
+    // 超過後に押した場合は「今から5分」になるよう補正
+    c.extraMin += 5 + (remain < 0 ? Math.ceil(-remain / 60000) : 0);
+    c.extended = true; c.alerted = false;
+    save(); renderWorking();
+  });
+  $('cancelBtn').addEventListener('click', function () {
+    if (!confirm('この調査を記録せずに中止しますか？')) return;
+    state.current = null; save(); show('home');
+  });
+
+  function finishSession(result) {
+    var c = state.current; if (!c) return null;
+    var minutes = Math.max(1, Math.round((Date.now() - c.startedAt) / 60000));
+    state.history.unshift({ title: c.title, startedAt: c.startedAt, minutes: minutes, result: result, notes: c.notes });
+    state.history = state.history.slice(0, 300);
+    state.current = null;
+    save();
+    return { title: c.title, notes: c.notes, minutes: minutes };
+  }
+  $('solvedBtn').addEventListener('click', function () { finishSession('solved'); show('home'); });
+  $('askBtn').addEventListener('click', function () {
+    var f = finishSession('asked');
+    if (!f) return;
+    state.draft = { to: '', title: f.title, goal: '', tried: f.notes, stuck: '', want: '', minutes: f.minutes };
+    save(); show('ask');
+  });
+  $('provOnlyBtn').addEventListener('click', function () {
+    var t = $('newTitle').value.trim();
+    state.draft = { to: '', title: t, goal: '', tried: '', stuck: '', want: '', minutes: 0 };
+    save(); show('ask');
+  });
+
+  /* ---------- 質問作成 ---------- */
+  var fields = { fTo: 'to', fTitle: 'title', fGoal: 'goal', fTried: 'tried', fStuck: 'stuck', fWant: 'want' };
+  function renderAsk() {
+    if (!state.draft) state.draft = { to: '', title: '', goal: '', tried: '', stuck: '', want: '', minutes: 0 };
+    Object.keys(fields).forEach(function (id) { $(id).value = state.draft[fields[id]] || ''; });
+    buildOutputs();
+  }
+  Object.keys(fields).forEach(function (id) {
+    $(id).addEventListener('input', function () { state.draft[fields[id]] = $(id).value; save(); buildOutputs(); });
+  });
+  function bullets(text) {
+    var lines = text.split('\n').map(function (l) { return l.replace(/^[\s・\-*•]+/, '').trim(); }).filter(Boolean);
+    return lines.map(function (l) { return '・' + l; }).join('\n');
+  }
+  function buildOutputs() {
+    var d = state.draft; if (!d) return;
+    var to = d.to.trim(), title = d.title.trim() || '(テーマ)';
+    var triedHead = '【試したこと】' + (d.minutes ? '(約' + d.minutes + '分調査)' : '');
+    var body = [];
+    body.push('「' + title + '」について確認させてください。');
+    body.push('');
+    if (d.goal.trim()) { body.push('【やりたいこと】'); body.push(d.goal.trim()); body.push(''); }
+    if (d.tried.trim()) { body.push(triedHead); body.push(bullets(d.tried)); body.push(''); }
+    if (d.stuck.trim()) { body.push('【分からない点】'); body.push(d.stuck.trim()); body.push(''); }
+    if (d.want.trim()) { body.push('【教えていただきたいこと】'); body.push(d.want.trim()); body.push(''); }
+    var core = body.join('\n').replace(/\n+$/, '');
+    var honorific = to ? (/(さん|様|先生|部長|課長)$/.test(to) ? to : to + 'さん') : '';
+    $('outProv').textContent = (honorific ? honorific + '、' : '') + 'お疲れさまです。「' + title + '」について調べていますが分からない点があり、確認させてください。詳細は追ってお送りします。';
+    $('outSlack').textContent = (honorific ? honorific + '\n' : '') + 'お疲れさまです。\n' + core + '\n\nお手すきの際にご確認いただけると助かります。';
+    $('outMail').textContent = '件名: 【確認】' + title + '\n\n' + (honorific ? honorific + '\n\n' : '') + 'お疲れさまです。\n\n' + core + '\n\nお忙しいところ恐れ入りますが、ご確認のほどよろしくお願いいたします。';
+  }
+  document.querySelectorAll('[data-copy]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = $(b.dataset.copy).textContent;
+      var done = function () { var o = b.textContent; b.textContent = 'コピーしました'; setTimeout(function () { b.textContent = o; }, 1200); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+      else fallback();
+      function fallback() {
+        var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  });
+
+  /* ---------- 履歴・設定 ---------- */
+  function renderHistory() {
+    $('sLimit').value = state.settings.limit;
+    $('sWarn').checked = state.settings.warn;
+    $('sExtend').checked = state.settings.extend;
+    $('sShortcut').value = state.settings.shortcut || '';
+    $('allHist').innerHTML = state.history.length ? state.history.map(histRow).join('') : '<p class="sub">まだ記録はありません。</p>';
+    updateNotifState();
+  }
+  $('sLimit').addEventListener('change', function () {
+    var v = parseInt($('sLimit').value, 10);
+    if (!(v >= 1 && v <= 180)) v = 30;
+    state.settings.limit = v; $('sLimit').value = v; save();
+  });
+  $('sWarn').addEventListener('change', function () { state.settings.warn = $('sWarn').checked; save(); });
+  $('sExtend').addEventListener('change', function () { state.settings.extend = $('sExtend').checked; save(); });
+  $('sShortcut').addEventListener('change', function () { state.settings.shortcut = $('sShortcut').value.trim(); save(); });
+  $('clearHist').addEventListener('click', function () {
+    if (!confirm('履歴をすべて消します。よろしいですか？')) return;
+    state.history = []; save(); renderHistory();
+  });
+
+  /* ---------- 起動 ---------- */
+  startTicking();
+  show(state.current ? 'working' : 'home');
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
