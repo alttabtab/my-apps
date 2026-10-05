@@ -262,14 +262,17 @@ pre { white-space: pre-wrap; word-break: break-word; font: inherit; background: 
 
   /* ---------- 調査開始・タイマー ---------- */
   function endAt(c) { return c.startedAt + (c.limitMin + c.extraMin) * 60000; }
-  function startSession(title) {
-    unlockAudio();
-    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(updateNotifState); } catch (e) {}
-    state.current = { title: title, startedAt: Date.now(), limitMin: state.settings.limit, extraMin: 0, extended: false, warned: false, alerted: false, notes: '' };
+  // external=true: URLパラメータ(ショートカット側から起動)で始める場合。時計タイマーは呼び出し元で開始済みなので呼ばない
+  function startSession(title, external, limitMin) {
+    if (!external) {
+      unlockAudio();
+      try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().then(updateNotifState); } catch (e) {}
+    }
+    state.current = { title: title, startedAt: Date.now(), limitMin: limitMin || state.settings.limit, extraMin: 0, extended: false, warned: false, alerted: false, notes: '' };
     state.draft = null;
     save();
     show('working');
-    runShortcut(state.current.limitMin);
+    if (!external) runShortcut(state.current.limitMin);
   }
   // iPhoneの「ショートカット」を呼び出す(時計アプリのタイマー用)。呼び出し後にアプリへ戻っても状態は保存済み。
   function runShortcut(minutes) {
@@ -430,7 +433,13 @@ pre { white-space: pre-wrap; word-break: break-word; font: inherit; background: 
 
   /* ---------- 起動 ---------- */
   startTicking();
-  show(state.current ? 'working' : 'home');
+  // ?start=タイトル(&min=分) で開かれたら、そのまま調査を開始する。調査中なら無視。再読込で二重開始しないようURLを掃除する。
+  var qs = new URLSearchParams(location.search);
+  var qTitle = (qs.get('start') || '').trim().slice(0, 80);
+  var qMin = parseInt(qs.get('min'), 10);
+  if (qs.has('start') || qs.has('min')) { try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+  if (qTitle && !state.current) startSession(qTitle, true, qMin >= 1 && qMin <= 180 ? qMin : 0);
+  else show(state.current ? 'working' : 'home');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }
